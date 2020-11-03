@@ -21,6 +21,7 @@ else:
 # SEP Course
 SEP_COURSE_ID = 24561
 LAB3_ASSIGNMENT_ID = 67644
+LAB4_ASSIGNMENT_ID = 69983
 SUBMISSION_DIR = "./submissions"
 
 # Initialize a new Canvas object
@@ -30,6 +31,8 @@ print(course)
 
 lab3 = course.get_assignment(LAB3_ASSIGNMENT_ID)
 print(lab3)
+lab4 = course.get_assignment(LAB4_ASSIGNMENT_ID)
+print(lab4)
 
 def get_latest_attachment(attachments):
     """ [UNTESTED] Get the latest attachment since a user may submit multiple times.
@@ -40,7 +43,8 @@ def get_latest_attachment(attachments):
     att = sorted(all_attachments)[-1][1]
     return att
 
-for sub in lab3.get_submissions(bucket="ungraded", workflow_state="submitted"):
+for sub in lab4.get_submissions(bucket="ungraded", workflow_state="submitted"):
+    print(sub.workflow_state)
     if sub.workflow_state == "submitted":
         attachments = sub.attachments
         # Find latest submission
