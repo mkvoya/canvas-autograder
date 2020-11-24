@@ -4,6 +4,7 @@ import sys
 import os
 from datetime import *
 import urllib
+import subprocess
 
 # Import the Canvas class
 from canvasapi import Canvas
@@ -58,19 +59,61 @@ for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
         fn = att['filename']
         if not os.path.exists(TEST_DIR):
             os.mkdir(TEST_DIR)
-            os.system("cp ../lexicon.cpp %s/" % TEST_DIR)
-            os.system("cp ../lexicon.h %s/" % TEST_DIR)
-            os.system("cp ../EnglishWords.txt %s/" % TEST_DIR)
         fn = TEST_DIR + "/" + fn
 
+        os.system("rm -f %s/*.msg" % TEST_DIR)
         os.system("rm -f %s" % fn)
 
         print(url, "=>", fn)
         urllib.request.urlretrieve(url, fn)
 
-        os.system("bash test.sh")
+        message = ""
+        cmd = "g++ -std=c++17 -o ./testspace/boggle.exe ./testspace/boggle.cpp ../lexicon.cpp -I.."
+        proc = subprocess.run(cmd.split(), capture_output=True)
+        if proc.returncode == 0:
+            message += "Compilation: Passed.\n"
+        else:
+            message += "Compilation: Failed.\n"
+            message += "Error message: " + str(proc.stderr)
+
+        nr_passed = 0
+        for t in range(1, 11):
+            # Run
+            cmd = "./testspace/boggle.exe"
+            input = "../testcases/%d.in" % t
+            answer = "../testcases/%d.ans" % t
+
+            with open(input) as f:
+                inputBytes = "".join(f.readlines())
+            with open(answer) as f:
+                ansLines = f.readlines()
+            proc = subprocess.run(["./testspace/boggle.exe"],
+                    input=inputBytes, text=True,
+                    capture_output=True,
+                    timeout = 5)
+            if proc.returncode == 0:
+                # normal
+                outLines = str(proc.stdout).split("\n")
+                passed = True
+                for i in range(len(ansLines)):
+                    outLines[i] = outLines[i].strip()
+                    ansLines[i] = ansLines[i].strip()
+                    if outLines[i] != ansLines[i]:
+                        # print(outLines)
+                        prompt = " Test #%d: Fail on Line %d (got \"%s\", expect \"%s\")\n" 
+                        message += prompt % (t, i, outLines[i], ansLines[i])
+                        passed = False
+                        break
+                if passed:
+                    message += " Test #%d: Passed.\n" % t
+                    nr_passed += 1
+            else:
+                message += " Test #%d: Exception or Timeout\n" % t
+        print(message)
+
+        # os.system("bash test.sh")
         print(sub.user_id)
-        break
+        # break
 
 
 def calc_score(nr_passed, nr_total):
@@ -81,17 +124,4 @@ def update_score(sub, score):
     """ [UNTESTED] Update the score of a submission.
     """
     sub.edit(submission={'posted_grade':score})
-
-
-def test_a_single_submission(uri):
-    cmd = "g++ -o boggle.exe -std=c++17 boggle.c lexicon.c"
-    os.system(cmd)
-    test_in_file
-    def test_(inF, ouF, anF):
-        cmd = "./boggle.exe < %s > %s" % (inF, ouF)
-        os.system(cmd)
-        cmd = "diff %s %s" % (anF, ouF)
-    for y in range(10):
-        i = y + 1
-        test_("%d.in" % i, "%d.out" % i, "%d.ans" % i)
 
