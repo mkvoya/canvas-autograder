@@ -49,6 +49,60 @@ def get_latest_attachment(attachments):
     att = sorted(all_attachments)[-1][1]
     return att
 
+
+def test_single_case(t):
+    # Run
+    input = "../testcases/%d.in" % t
+    answer = "../testcases/%d.ans" % t
+    with open(input) as f:
+        inputLines = "".join(f.readlines())
+    with open(answer) as f:
+        ansLines = f.readlines()
+
+    cmd = "docker run -i -v /home/mkdong/code/QBoggle/canvas-autograder/docker/app:/app -w /app ubuntu:19.10 ./boggle.exe"
+    try:
+        proc = subprocess.run(cmd.split(),
+                input=inputLines, text=True,
+                capture_output=True,
+                shell=False,
+                timeout = 5)
+        if proc.returncode == 0:
+            # normal
+            outLines = str(proc.stdout).split("\n")
+            passed = True
+            for i in range(len(ansLines)):
+                outLines[i] = outLines[i].strip()
+                ansLines[i] = ansLines[i].strip()
+                if ("is too short." in ansLines[i] or
+                        "is not a word." in ansLines[i] or
+                        "is not on board." in ansLines[i] or
+                        "is already found." in ansLines[i]):
+                    outLines[i] = str.lower(outLines[i])
+                    ansLines[i] = str.lower(ansLines[i])
+                if outLines[i] != ansLines[i]:
+                    # print(outLines)
+                    if len(outLines[i]) > 20: outLines[i] = outLines[i][:20] + "..."
+                    if len(ansLines[i]) > 20: ansLines[i] = ansLines[i][:20] + "..."
+                    prompt = " Test #%d: Fail on Line %d (got \"%s\", expect \"%s\")\n" 
+                    msg = prompt % (t, i, outLines[i], ansLines[i])
+                    return (False, msg)
+            return (True, " Test #%d: Passed.\n" % t)
+        else:
+            msg = " Test #%d: Runtime Exception %s\n" % (t, proc.stderr)
+            return (False, msg)
+    except subprocess.TimeoutExpired as e:
+        return (False, " Test #%d: Timeout\n" % t)
+
+def calc_score(nr_passed, nr_total):
+    if nr_passed == 0: return 40
+    return 60 + 40 * nr_passed / nr_total
+
+def update_score(sub, score, comment):
+    """ [UNTESTED] Update the score of a submission.
+    """
+    sub.edit(submission={'posted_grade':score}, comment={'text_comment':comment})
+
+
 for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
     print(sub.workflow_state)
     if sub.workflow_state == "submitted":
@@ -61,14 +115,13 @@ for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
             os.mkdir(TEST_DIR)
         fn = TEST_DIR + "/" + fn
 
-        os.system("rm -f %s/*.msg" % TEST_DIR)
         os.system("rm -f %s" % fn)
 
         print(url, "=>", fn)
         urllib.request.urlretrieve(url, fn)
 
         message = ""
-        cmd = "g++ -std=c++17 -o ./testspace/boggle.exe ./testspace/boggle.cpp ../lexicon.cpp -I.."
+        cmd = "g++ -std=c++17 -o ./docker/app/boggle.exe ./testspace/boggle.cpp ../lexicon.cpp -I.."
         proc = subprocess.run(cmd.split(), capture_output=True)
         if proc.returncode == 0:
             message += "Compilation: Passed.\n"
@@ -78,50 +131,18 @@ for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
 
         nr_passed = 0
         for t in range(1, 11):
-            # Run
-            cmd = "./testspace/boggle.exe"
-            input = "../testcases/%d.in" % t
-            answer = "../testcases/%d.ans" % t
+            print("Testing case %d" % t)
+            result, msg = test_single_case(t)
+            if result:
+                nr_passed += 1
+            message += msg
 
-            with open(input) as f:
-                inputBytes = "".join(f.readlines())
-            with open(answer) as f:
-                ansLines = f.readlines()
-            proc = subprocess.run(["./testspace/boggle.exe"],
-                    input=inputBytes, text=True,
-                    capture_output=True,
-                    timeout = 5)
-            if proc.returncode == 0:
-                # normal
-                outLines = str(proc.stdout).split("\n")
-                passed = True
-                for i in range(len(ansLines)):
-                    outLines[i] = outLines[i].strip()
-                    ansLines[i] = ansLines[i].strip()
-                    if outLines[i] != ansLines[i]:
-                        # print(outLines)
-                        prompt = " Test #%d: Fail on Line %d (got \"%s\", expect \"%s\")\n" 
-                        message += prompt % (t, i, outLines[i], ansLines[i])
-                        passed = False
-                        break
-                if passed:
-                    message += " Test #%d: Passed.\n" % t
-                    nr_passed += 1
-            else:
-                message += " Test #%d: Exception or Timeout\n" % t
         print(message)
+        score = calc_score(nr_passed, 10)
+        print("Score: %d" % score)
 
-        # os.system("bash test.sh")
-        print(sub.user_id)
+        update_score(sub, score, message)
+        print("Score uploaded for %d" % sub.user_id)
         # break
 
-
-def calc_score(nr_passed, nr_total):
-    if nr_passed == 0: return 40
-    return 60 + 40 * nr_passed / nr_total
-
-def update_score(sub, score):
-    """ [UNTESTED] Update the score of a submission.
-    """
-    sub.edit(submission={'posted_grade':score})
 
