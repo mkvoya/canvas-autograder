@@ -65,7 +65,7 @@ def test_single_case(t):
                 input=inputLines, text=True,
                 capture_output=True,
                 shell=False,
-                timeout = 5)
+                timeout = 6)
         if proc.returncode == 0:
             # normal
             outLines = str(proc.stdout).split("\n")
@@ -91,7 +91,11 @@ def test_single_case(t):
             msg = " Test #%d: Runtime Exception %s\n" % (t, proc.stderr)
             return (False, msg)
     except subprocess.TimeoutExpired as e:
+        print(e)
         return (False, " Test #%d: Timeout\n" % t)
+    except UnicodeDecodeError as e:
+        print(e)
+        return (False, " Test #%d: Output Error\n" % t)
 
 def calc_score(nr_passed, nr_total):
     if nr_passed == 0: return 40
@@ -102,40 +106,44 @@ def update_score(sub, score, comment):
     """
     sub.edit(submission={'posted_grade':score}, comment={'text_comment':comment})
 
+idx = 0
 
 for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
-    print(sub.workflow_state)
+    idx += 1
+    print(idx, sub.workflow_state)
     if sub.workflow_state == "submitted":
         attachments = sub.attachments
         # Find latest submission
         att = get_latest_attachment(attachments)
         url = att['url']
-        fn = att['filename']
+        fn = "boggle.cpp"
         if not os.path.exists(TEST_DIR):
             os.mkdir(TEST_DIR)
         fn = TEST_DIR + "/" + fn
 
-        os.system("rm -f %s" % fn)
+        os.system("rm -f %s/*.cpp" % TEST_DIR)
+        os.system("rm -f ./docker/app/boggle.exe")
 
         print(url, "=>", fn)
         urllib.request.urlretrieve(url, fn)
 
         message = ""
-        cmd = "g++ -std=c++17 -o ./docker/app/boggle.exe ./testspace/boggle.cpp ../lexicon.cpp -I.."
+        cmd = "g++ -std=c++14 -o ./docker/app/boggle.exe ./testspace/boggle.cpp ../lexicon.cpp -I.."
         proc = subprocess.run(cmd.split(), capture_output=True)
+        nr_passed = 0
+
         if proc.returncode == 0:
             message += "Compilation: Passed.\n"
+
+            for t in range(1, 11):
+                print("Testing case %d" % t)
+                result, msg = test_single_case(t)
+                if result:
+                    nr_passed += 1
+                message += msg
         else:
             message += "Compilation: Failed.\n"
             message += "Error message: " + str(proc.stderr)
-
-        nr_passed = 0
-        for t in range(1, 11):
-            print("Testing case %d" % t)
-            result, msg = test_single_case(t)
-            if result:
-                nr_passed += 1
-            message += msg
 
         print(message)
         score = calc_score(nr_passed, 10)
@@ -144,5 +152,11 @@ for sub in lab5.get_submissions(bucket="ungraded", workflow_state="submitted"):
         update_score(sub, score, message)
         print("Score uploaded for %d" % sub.user_id)
         # break
+
+        cmd = "sudo docker ps -a | cut -d ' ' -f 1 | xargs sudo docker kill >/dev/null 2>&1"
+        os.system(cmd)
+
+        cmd = "sudo docker ps -a | cut -d ' ' -f 1 | xargs sudo docker rm"
+        os.system(cmd)
 
 
